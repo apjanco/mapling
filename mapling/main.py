@@ -27,20 +27,28 @@ def python_matcher(text, term):
 
 @app.command()
 def process(
-    path: str,
+    documents_folder: str,
     gazetteer: str = None,
     model: str = None,
     html: bool = False,
     output: str = Path.cwd().as_posix(),  #current path
 ):
     data = []
+    if not Path(output).exists():
+        Path(output).mkdir(parents=True, exist_ok=True)
+        message = typer.style(
+            "🌞 Creating a new directory: " + output,
+            fg=typer.colors.RED,
+            bold=True,
+        )
+        typer.echo(message)
 
     if gazetteer:
         places = []
         with open(gazetteer) as f:
             for line in f:
                 places.append(line.replace("\n", ""))
-        files = Path(path).iterdir()
+        files = Path(documents_folder).iterdir()
         with typer.progressbar(files, label="🎠 Processing gazetteer") as progress:
             for file in progress:
                 text = textract.process(file).decode("utf-8")
@@ -71,9 +79,9 @@ def process(
                 )
                 typer.echo(error)
                 raise typer.Exit()
-                
+
             else:
-                files = Path(path).iterdir()
+                files = Path(documents_folder).iterdir()
                 with typer.progressbar(files, label="🍁 Processing model") as progress:
                     for file in progress:
                         text = textract.process(file).decode("utf-8")
@@ -115,7 +123,7 @@ def process(
                 )
                 raise typer.Exit()
 
-    if html:
+    if html and model or gazetteer:
         nlp = spacy.blank("en")
         ner = nlp.create_pipe("ner")
         nlp.add_pipe(ner, last=True)
@@ -136,7 +144,7 @@ def process(
             pattern = [{"TEXT": f"{name}"}]
             matcher.add(row["label"], None, pattern)
 
-        files = Path(path).iterdir()
+        files = Path(documents_folder).iterdir()
         for file in files:
             text = textract.process(file).decode("utf-8")
             doc = nlp(text)
@@ -151,12 +159,19 @@ def process(
                         pass
 
             html = displacy.render(doc, style="ent", page=True, options=options)
+
             output_path = Path(output) / f"{file.name.split('.')[0]}.html"
             output_path.open("w", encoding="utf-8").write(html)
             success = typer.style(
                 "🌵 Created file: ", fg=typer.colors.BRIGHT_GREEN, bold=True
             )
             typer.echo(success + output_path.name)
+    else:
+        need_something = typer.style(
+            "🌮 Please select a gazetteer or spaCy model", fg=typer.colors.BRIGHT_GREEN, bold=True
+        )
+        typer.echo(need_something)
+        raise typer.Exit()
 
     if data:
         df = pd.DataFrame(data)
